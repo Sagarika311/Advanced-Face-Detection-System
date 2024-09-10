@@ -1,7 +1,7 @@
 # Advanced Face Detection System
 
 ## Overview
-This project implements a real-time face detection system using OpenCV, age, and gender classification models. It also * includes additional functionality such as eye detection toggling, face image capture, and real-time FPS display. *
+This project implements a real-time face detection system using OpenCV, age, and gender classification models. It also includes # additional functionality such as eye detection toggling, face image capture, and real-time FPS display. #
 
 ## The key features of this project include:
 
