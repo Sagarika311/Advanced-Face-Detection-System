@@ -1,8 +1,4 @@
-opencv-python==4.10.0.84
 numpy==1.26.4
-PyQt5==5.15.11
-pyinstaller==6.15.0
-
-opencv-python-headless
-numpy
-gradio
+opencv-python-headless==4.10.0.84
+gradio==3.40.0
+streamlit==1.26.0
