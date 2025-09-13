@@ -1,20 +1,92 @@
 <!doctype html>
-<html>
+<html lang="en">
 <head>
   <meta charset="utf-8" />
   <title>Face Detection System (Web)</title>
   <style>
-    body { font-family: Arial, sans-serif; background:#f3f4f6; margin:0; padding:20px; }
-    .container { max-width: 900px; margin: 0 auto; background: white; padding: 16px; border-radius: 8px; box-shadow: 0 6px 18px rgba(0,0,0,0.06);}
-    h1 { margin-top:0 }
-    .controls { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:12px; }
-    .controls button, .controls input { padding:8px 12px; border-radius:6px; border:1px solid #ddd; background:#fff; cursor:pointer;}
-    .video { display:flex; gap:16px; align-items:flex-start; }
-    .sidebar { width: 260px; }
-    .gallery { display:flex; gap:8px; flex-wrap:wrap; padding:8px; border:1px dashed #ddd; border-radius:6px; height:120px; overflow:auto; background:#fafafa; }
-    .thumbnail img { width:100px; height:100px; object-fit:cover; border-radius:6px; border:1px solid #ccc;}
-    .stats { margin-top:8px; font-size:14px; color:#333;}
+    body {
+      font-family: 'Segoe UI', Arial, sans-serif;
+      background:#f3f4f6;
+      margin:0; padding:20px;
+    }
+    .container {
+      max-width: 980px;
+      margin: 0 auto;
+      background: white;
+      padding: 20px;
+      border-radius: 12px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.08);
+    }
+    h1 {
+      margin-top:0;
+      font-size: 28px;
+      text-align:center;
+      color:#111827;
+    }
+    .controls {
+      display:flex;
+      flex-wrap:wrap;
+      gap:10px;
+      align-items:center;
+      margin-bottom:16px;
+      justify-content: space-between;
+    }
+    .btn {
+      padding:8px 14px;
+      border-radius:8px;
+      border:1px solid #ddd;
+      background:#fff;
+      cursor:pointer;
+      transition: all 0.2s ease;
+    }
+    .btn:hover { background:#f9fafb; }
+    .video {
+      display:flex;
+      gap:20px;
+      align-items:flex-start;
+      flex-wrap:wrap;
+    }
+    .video img {
+      border-radius:10px;
+      border:1px solid #ccc;
+    }
+    .sidebar {
+      width: 260px;
+      flex-shrink:0;
+    }
+    .gallery {
+      display:flex;
+      gap:8px;
+      flex-wrap:wrap;
+      padding:8px;
+      border:1px dashed #ddd;
+      border-radius:8px;
+      height:160px;
+      overflow:auto;
+      background:#fafafa;
+    }
+    .thumbnail img {
+      width:100px;
+      height:100px;
+      object-fit:cover;
+      border-radius:8px;
+      border:1px solid #ccc;
+      transition: transform 0.2s ease;
+    }
+    .thumbnail img:hover {
+      transform: scale(1.05);
+    }
+    .stats {
+      margin-top:10px;
+      font-size:14px;
+      color:#374151;
+    }
     .label { font-weight:600; margin-right:6px; }
+    .slider {
+      display:flex;
+      align-items:center;
+      gap:6px;
+    }
   </style>
 </head>
 <body>
@@ -22,24 +94,26 @@
     <h1>Face Detection System — Web Demo</h1>
 
     <div class="controls">
-      <button id="toggleBtn">Toggle Detection</button>
-      <button id="captureBtn">Capture Faces</button>
-      <button id="clearBtn">Clear Captures</button>
+      <div style="display:flex; gap:10px; flex-wrap:wrap;">
+        <button id="toggleBtn" class="btn">Toggle Detection</button>
+        <button id="captureBtn" class="btn">Capture Faces</button>
+        <button id="clearBtn" class="btn">Clear Captures</button>
+      </div>
 
-      <div style="display:flex;align-items:center;">
+      <div class="slider">
         <span class="label">Confidence</span>
         <input id="confSlider" type="range" min="10" max="99" value="50">
         <span id="confVal">0.50</span>
       </div>
 
-      <div style="margin-left:auto;">
+      <div>
         <span id="fps">FPS: —</span> • <span id="faces">Faces: —</span>
       </div>
     </div>
 
     <div class="video">
       <div>
-        <img id="videoFrame" src="/video_feed" width="640" height="480" style="border-radius:6px; border:1px solid #ccc;">
+        <img id="videoFrame" src="/video_feed" width="640" height="480">
       </div>
 
       <div class="sidebar">
@@ -52,7 +126,11 @@
 
 <script>
 async function postJSON(url, body = {}) {
-  const res = await fetch(url, {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)});
+  const res = await fetch(url, {
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify(body)
+  });
   return res.json();
 }
 
@@ -61,7 +139,9 @@ async function refreshStats(){
   const j = await r.json();
   document.getElementById("fps").innerText = "FPS: " + j.fps;
   document.getElementById("faces").innerText = "Faces: " + j.faces;
-  document.getElementById("info").innerText = "Detection: " + (j.face_detection_active ? "ON" : "OFF") + " • Confidence: " + j.confidence_threshold.toFixed(2);
+  document.getElementById("info").innerText =
+    "Detection: " + (j.face_detection_active ? "ON" : "OFF") +
+    " • Confidence: " + j.confidence_threshold.toFixed(2);
 }
 
 async function refreshGallery(){
@@ -86,7 +166,8 @@ async function refreshGallery(){
 
 document.getElementById("toggleBtn").addEventListener("click", async ()=>{
   const res = await postJSON("/toggle_detection");
-  document.getElementById("info").innerText = "Detection: " + (res.face_detection_active ? "ON" : "OFF");
+  document.getElementById("info").innerText =
+    "Detection: " + (res.face_detection_active ? "ON" : "OFF");
 });
 
 document.getElementById("captureBtn").addEventListener("click", async ()=>{
