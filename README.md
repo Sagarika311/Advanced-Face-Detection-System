@@ -32,7 +32,7 @@ The system uses **OpenCV’s DNN face detector** for accurate results, performs 
 ![Demo Screenshot](Demo.png)  
 
 ### Web (Flask)
-Deployed on Railway → [https://your-app-name.up.railway.app](https://your-app-name.up.railway.app) *(example link)*
+Deployed on Railway → [https://Advanced-Face-Detection-System.up.railway.app](https://advanced-face-detection-system-production.up.railway.app/)
 
 ---
 
