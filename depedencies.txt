@@ -1,0 +1,15 @@
+""" 
+Core dependencies:
+numpy==1.26.4
+
+For local PyQt GUI & PyInstaller:
+opencv-python==4.10.0.84
+PyQt5==5.15.11
+pyinstaller==6.15.0
+
+For headless environments (Streamlit, Gradio, HuggingFace Spaces):
+opencv-python-headless==4.10.0.84
+streamlit==1.27.0
+gradio==3.44.0
+
+"""
