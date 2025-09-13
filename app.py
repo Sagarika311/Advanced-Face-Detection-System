@@ -1,14 +1,7 @@
-import os
-import time
-import json
-import cv2
-import numpy as np
-import threading
+import os, time, json, cv2, numpy as np, threading
 from flask import Flask, render_template, Response, jsonify, request, send_from_directory
 
-# Helper to get project root path
 ROOT = os.path.dirname(os.path.abspath(__file__))
-
 def resource_path(relative_path):
     return os.path.join(ROOT, relative_path)
 
@@ -16,7 +9,6 @@ def resource_path(relative_path):
 with open(resource_path("config.json"), "r") as f:
     CONFIG = json.load(f)
 
-MODEL_DIR = resource_path("models")
 CAPTURE_DIR = resource_path(CONFIG.get("captured_faces_dir", "captured_faces"))
 os.makedirs(CAPTURE_DIR, exist_ok=True)
 
@@ -31,8 +23,7 @@ def load_models(cfg):
     return face_net, age_net, gender_net
 
 face_net, age_net, gender_net = load_models(CONFIG)
-
-AGE_LIST = ['(0-2)', '(4-6)', '(8-12)', '(15-20)', '(25-32)', '(38-43)', '(48-53)', '(60-100)']
+AGE_LIST = ['(0-2)', '(4-6)', '(8-12)', '(15-20)', '(25-32)','(38-43)','(48-53)','(60-100)']
 GENDER_LIST = ['Male', 'Female']
 
 # Shared state
@@ -42,33 +33,24 @@ state = {
     "last_faces": [],
     "last_frame": None,
     "fps": 0.0,
-    "faces_count": 0,
+    "faces_count": 0
 }
 state_lock = threading.Lock()
 
-# Safe capture setup
+# Video capture with fallback
 def make_capture():
-    idx = CONFIG.get("camera_index", 0)
-    cap = cv2.VideoCapture(idx)
+    cap = cv2.VideoCapture(CONFIG.get("camera_index", 0))
     if not cap.isOpened():
         fallback = resource_path(CONFIG.get("video_fallback", "sample.mp4"))
         if os.path.exists(fallback):
             cap = cv2.VideoCapture(fallback)
         else:
-            print("[WARN] No camera or sample video found. Using placeholder.")
-            return None
+            raise RuntimeError("No camera and no sample video found.")
     return cap
 
 cap = make_capture()
 
-def get_placeholder_frame():
-    """Return a neutral frame if no video source is available."""
-    frame = np.zeros((480, 640, 3), dtype=np.uint8)
-    cv2.putText(frame, "No Camera Available", (120, 240),
-                cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 0, 255), 3, cv2.LINE_AA)
-    return frame
-
-# Detection helpers
+# Detection function
 def detect_faces(frame, conf_thresh):
     h, w = frame.shape[:2]
     blob = cv2.dnn.blobFromImage(cv2.resize(frame, (300, 300)), 1.0,
@@ -77,42 +59,31 @@ def detect_faces(frame, conf_thresh):
     detections = face_net.forward()
     faces = []
     for i in range(detections.shape[2]):
-        confidence = float(detections[0, 0, i, 2])
+        confidence = float(detections[0,0,i,2])
         if confidence > conf_thresh:
-            box = detections[0, 0, i, 3:7] * np.array([w, h, w, h])
-            (x1, y1, x2, y2) = box.astype("int")
-            x1, y1 = max(0, x1), max(0, y1)
-            x2, y2 = min(w - 1, x2), min(h - 1, y2)
-            faces.append((x1, y1, x2 - x1, y2 - y1))
+            box = detections[0,0,i,3:7]*np.array([w,h,w,h])
+            x1,y1,x2,y2 = box.astype(int)
+            faces.append((max(0,x1), max(0,y1), x2-x1, y2-y1))
     return faces
 
 def estimate_age_gender(face_img):
-    blob = cv2.dnn.blobFromImage(
-        face_img, 1, (227, 227),
-        (78.4263377603, 87.7689143744, 114.895847746), swapRB=False
-    )
+    blob = cv2.dnn.blobFromImage(face_img, 1, (227,227),
+                                 (78.4263377603,87.7689143744,114.895847746), swapRB=False)
     gender_net.setInput(blob)
-    gender_preds = gender_net.forward()
-    gender = GENDER_LIST[int(np.argmax(gender_preds[0]))]
-
+    gender = GENDER_LIST[int(np.argmax(gender_net.forward()[0]))]
     age_net.setInput(blob)
-    age_preds = age_net.forward()
-    age = AGE_LIST[int(np.argmax(age_preds[0]))]
+    age = AGE_LIST[int(np.argmax(age_net.forward()[0]))]
     return gender, age
 
-# Capture worker
+# Background capture thread
 def capture_worker():
-    prev_time = time.time()
     frame_times = []
     while True:
-        if cap is None:
-            frame = get_placeholder_frame()
-            time.sleep(0.5)
-        else:
-            ret, frame = cap.read()
-            if not ret:
-                frame = get_placeholder_frame()
-                time.sleep(0.1)
+        ret, frame = cap.read()
+        if not ret:
+            cap.set(cv2.CAP_PROP_POS_FRAMES, 0)  # loop video fallback
+            time.sleep(0.05)
+            continue
 
         start = time.time()
         faces = []
@@ -120,106 +91,79 @@ def capture_worker():
             active = state["face_detection_active"]
             conf = state["confidence_threshold"]
 
-        if active and cap is not None:
-            try:
-                faces = detect_faces(frame, conf)
-            except Exception:
-                faces = []
-            for (x, y, w, h) in faces:
+        if active:
+            try: faces = detect_faces(frame, conf)
+            except: faces = []
+            for (x,y,w,h) in faces:
                 face_img = frame[y:y+h, x:x+w]
-                if face_img.size == 0:
-                    continue
                 try:
                     gender, age = estimate_age_gender(face_img)
                     label = f"{gender}, {age}"
-                except Exception:
+                except:
                     label = ""
-                cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 255, 0), 2)
-                if label:
-                    cv2.putText(frame, label, (x, y - 10),
-                                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
+                cv2.rectangle(frame, (x,y), (x+w,y+h), (0,255,0), 2)
+                if label: cv2.putText(frame, label, (x,y-10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0,255,255), 2)
 
         end = time.time()
-        frame_times.append(end - start)
-        if len(frame_times) > 30:
-            frame_times.pop(0)
-        avg = (sum(frame_times) / len(frame_times)) if frame_times else 0.0
-        fps_val = 1.0 / avg if avg > 0 else 0.0
+        frame_times.append(end-start)
+        if len(frame_times)>30: frame_times.pop(0)
+        fps_val = 1.0/(sum(frame_times)/len(frame_times)) if frame_times else 0
 
         with state_lock:
-            state["last_faces"] = faces
-            state["last_frame"] = frame.copy()
-            state["fps"] = fps_val
-            state["faces_count"] = len(faces)
+            state["last_faces"]=faces
+            state["last_frame"]=frame.copy()
+            state["fps"]=fps_val
+            state["faces_count"]=len(faces)
 
-t = threading.Thread(target=capture_worker, daemon=True)
-t.start()
+threading.Thread(target=capture_worker, daemon=True).start()
 
 # Flask app
 app = Flask(__name__, static_folder="captured_faces", template_folder="templates")
 
 @app.route("/")
-def index():
-    return render_template("index.html")
+def index(): return render_template("index.html")
 
 def gen_mjpeg():
     boundary = b"--frame\r\n"
     while True:
-        with state_lock:
-            frame = state["last_frame"]
-        if frame is None:
-            frame = get_placeholder_frame()
-        ret, jpeg = cv2.imencode(".jpg", frame)
-        if not ret:
-            continue
+        with state_lock: frame = state["last_frame"]
+        if frame is None: time.sleep(0.05); continue
+        ret,jpeg = cv2.imencode(".jpg", frame)
+        if not ret: continue
         yield boundary + b"Content-Type: image/jpeg\r\n\r\n" + jpeg.tobytes() + b"\r\n"
 
 @app.route("/video_feed")
-def video_feed():
-    return Response(gen_mjpeg(), mimetype='multipart/x-mixed-replace; boundary=frame')
+def video_feed(): return Response(gen_mjpeg(), mimetype='multipart/x-mixed-replace; boundary=frame')
 
-# --- (rest of endpoints unchanged) ---
-# toggle_detection, set_confidence, capture_faces, clear_captures, stats, thumbnails, captured_file
-
-# API endpoints for controls + actions
 @app.route("/toggle_detection", methods=["POST"])
 def toggle_detection():
-    with state_lock:
-        state["face_detection_active"] = not state["face_detection_active"]
-        return jsonify({"face_detection_active": state["face_detection_active"]})
+    with state_lock: state["face_detection_active"] = not state["face_detection_active"]
+    return jsonify({"face_detection_active": state["face_detection_active"]})
 
 @app.route("/set_confidence", methods=["POST"])
 def set_confidence():
     data = request.get_json() or {}
     val = float(data.get("value", state["confidence_threshold"]))
     val = max(0.01, min(0.99, val))
-    with state_lock:
-        state["confidence_threshold"] = val
+    with state_lock: state["confidence_threshold"]=val
     return jsonify({"confidence_threshold": state["confidence_threshold"]})
 
 @app.route("/capture_faces", methods=["POST"])
 def capture_faces():
     saved = 0
-    timestamp_base = int(time.time() * 1000)
+    ts_base = int(time.time()*1000)
     with state_lock:
         faces = list(state["last_faces"])
         frame = state["last_frame"].copy() if state["last_frame"] is not None else None
-
     if frame is None or not faces:
-        return jsonify({"saved": 0, "message": "No faces to capture"})
-
-    for i, (x, y, w, h) in enumerate(faces):
-        fx, fy = x, y
-        fw, fh = max(1, w), max(1, h)
-        face_img = frame[fy:fy+fh, fx:fx+fw]
-        fname = f"face_{timestamp_base + i}.jpg"
+        return jsonify({"saved":0,"message":"No faces to capture"})
+    for i,(x,y,w,h) in enumerate(faces):
+        face_img = frame[y:y+h, x:x+w]
+        fname = f"face_{ts_base+i}.jpg"
         fpath = os.path.join(CAPTURE_DIR, fname)
-        try:
-            cv2.imwrite(fpath, face_img)
-            saved += 1
-        except Exception as e:
-            print("Failed to save", e)
-    return jsonify({"saved": saved})
+        try: cv2.imwrite(fpath, face_img); saved+=1
+        except: pass
+    return jsonify({"saved":saved})
 
 @app.route("/clear_captures", methods=["POST"])
 def clear_captures():
@@ -227,34 +171,29 @@ def clear_captures():
     for fn in os.listdir(CAPTURE_DIR):
         p = os.path.join(CAPTURE_DIR, fn)
         if os.path.isfile(p):
-            try:
-                os.remove(p)
-                removed += 1
-            except Exception:
-                pass
-    return jsonify({"removed": removed})
+            try: os.remove(p); removed+=1
+            except: pass
+    return jsonify({"removed":removed})
 
 @app.route("/stats")
 def stats():
     with state_lock:
-        return jsonify({
-            "fps": round(state["fps"], 2),
-            "faces": state["faces_count"],
-            "face_detection_active": state["face_detection_active"],
-            "confidence_threshold": state["confidence_threshold"]
-        })
+        return jsonify({"fps":round(state["fps"],2),
+                        "faces":state["faces_count"],
+                        "face_detection_active":state["face_detection_active"],
+                        "confidence_threshold":state["confidence_threshold"]})
 
 @app.route("/thumbnails")
 def thumbnails():
-    files = []
+    files=[]
     for fn in sorted(os.listdir(CAPTURE_DIR), reverse=True):
-        if fn.lower().endswith((".png", ".jpg", ".jpeg")):
-            files.append({"name": fn, "url": f"/captured/{fn}"})
+        if fn.lower().endswith((".png",".jpg",".jpeg")):
+            files.append({"name":fn,"url":f"/captured/{fn}"})
     return jsonify(files)
 
 @app.route("/captured/<path:filename>")
 def captured_file(filename):
     return send_from_directory(CAPTURE_DIR, filename)
 
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+if __name__=="__main__":
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT",5000)))
