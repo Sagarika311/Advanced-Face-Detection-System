@@ -1,12 +1,17 @@
-# 🎭 Face Detection System (PyQt5 + OpenCV)
+# Face Detection System (PyQt5 + Flask + OpenCV)
 
 ![Python](https://img.shields.io/badge/Python-3.11-blue?logo=python)
 ![OpenCV](https://img.shields.io/badge/OpenCV-DNN-green?logo=opencv)
+![Flask](https://img.shields.io/badge/Flask-WebApp-black?logo=flask)
 ![PyQt5](https://img.shields.io/badge/PyQt5-GUI-orange?logo=qt)
+![Railway](https://img.shields.io/badge/Deployed%20on-Railway-purple?logo=railway)
 ![License](https://img.shields.io/badge/License-MIT-lightgrey)
 
-A desktop GUI application that detects faces in **real-time** using OpenCV’s DNN face detector.  
-The system also performs **age and gender prediction**, allows you to **capture faces**, and manage them inside a **gallery view**.  
+A real-time **Face Detection System** that works in two modes:  
+1. 🖥️ **Desktop GUI** with PyQt5  
+2. 🌐 **Web App** with Flask (deployable on Railway)  
+
+The system uses **OpenCV’s DNN face detector** for accurate results, performs **age and gender prediction**, allows you to **capture faces**, and manage them inside a **gallery view**.
 
 ---
 
@@ -15,7 +20,7 @@ The system also performs **age and gender prediction**, allows you to **capture 
 - 🧑‍🤝‍🧑 Age & gender prediction using pre-trained models  
 - ⚡ Adjustable confidence threshold  
 - 💾 Capture faces into a local gallery  
-- 🎮 Keyboard shortcuts:  
+- 🎮 Keyboard shortcuts (GUI mode):  
   - `C` → Capture face  
   - `Q` → Quit application  
 
@@ -23,11 +28,15 @@ The system also performs **age and gender prediction**, allows you to **capture 
 
 ## 🖼️ Demo
 
+### Desktop (PyQt5)
 ![Demo Screenshot](Demo.png)  
+
+### Web (Flask)
+Deployed on Railway → [https://your-app-name.up.railway.app](https://your-app-name.up.railway.app) *(example link)*
 
 ---
 
-## ⚙️ Installation
+## ⚙️ Installation (Desktop GUI)
 
 Clone the repository and install dependencies:
 
@@ -37,7 +46,7 @@ cd FaceDetectionSystem
 pip install -r requirements.txt
 ````
 
-Run the app:
+Run the desktop app:
 
 ```bash
 python face_detection_gui.py
@@ -45,7 +54,30 @@ python face_detection_gui.py
 
 ---
 
-## 📦 Build as Executable (Windows)
+## 🌐 Run as Web App (Flask)
+
+Install dependencies:
+
+```bash
+pip install -r requirements.txt
+```
+
+Run locally:
+
+```bash
+python app.py
+```
+
+Then open [http://localhost:5000](http://localhost:5000) in your browser.
+
+### 🚀 Deploy on Railway
+
+This repo includes a `Dockerfile` for deployment.
+Push to GitHub and connect the repo to [Railway](https://railway.app/) for instant deployment.
+
+---
+
+## 📦 Build as Executable (Windows, Desktop)
 
 To package into a `.exe` using **PyInstaller**:
 
@@ -64,10 +96,13 @@ The built executable will be inside the `dist/` folder.
 
 ```
 FaceDetectionSystem/
-│── face_detection_gui.py      # Main GUI application
+│── app.py                     # Flask web app
+│── face_detection_gui.py      # Desktop GUI application
 │── config.json                # Config file (paths, settings)
 │── models/                    # Pre-trained Caffe models
+│── templates/                 # HTML templates (Flask)
 │── requirements.txt           # Dependencies
+│── Dockerfile                 # For Railway deployment
 │── README.md                  # Documentation
 │── .gitignore                 # Ignore build/venv/output
 │── captured_faces/            # Saved face captures (auto-created)
@@ -78,10 +113,12 @@ FaceDetectionSystem/
 
 ## 👩‍💻 Tech Stack
 
-* **Python 3.11**
+* **Python 3.10 / 3.11**
 * **OpenCV DNN**
-* **PyQt5**
-* **PyInstaller**
+* **Flask (for web app)**
+* **PyQt5 (for desktop app)**
+* **PyInstaller (for .exe builds)**
+* **Gunicorn (for production deployment on Railway)**
 
 ---
 
@@ -90,6 +127,7 @@ FaceDetectionSystem/
 * Train on custom datasets
 * Add face recognition (match against known people)
 * Export captured face metadata
+* REST API for face detection (extend Flask mode)
 
 ---
 
