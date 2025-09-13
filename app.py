@@ -1,11 +1,10 @@
 import os
 import time
 import json
-import base64
 import cv2
 import numpy as np
 import threading
-from flask import Flask, render_template, Response, jsonify, request
+from flask import Flask, render_template, Response, jsonify, request, send_from_directory
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 
@@ -185,6 +184,7 @@ def toggle_detection():
 @app.route("/set_confidence", methods=["POST"])
 def set_confidence():
     val = float(request.json.get("value", 0.5))
+    val = max(0.01, min(0.99, val))
     with state_lock:
         state["confidence_threshold"] = val
     return jsonify({"confidence_threshold": state["confidence_threshold"]})
@@ -192,16 +192,23 @@ def set_confidence():
 @app.route("/capture_faces", methods=["POST"])
 def capture_faces():
     saved = 0
+    timestamp_base = int(time.time() * 1000)
     with state_lock:
         frame = state["last_frame"]
-        faces = state["last_faces"]
-    if frame is not None:
-        for (x, y, w, h) in faces:
+        faces = list(state["last_faces"])
+
+    if frame is not None and faces:
+        for i, (x, y, w, h) in enumerate(faces):
             face_img = frame[y:y+h, x:x+w]
-            if face_img.size == 0: continue
-            fname = os.path.join(CAPTURE_DIR, f"{time.time():.0f}.jpg")
-            cv2.imwrite(fname, face_img)
-            saved += 1
+            if face_img.size == 0:
+                continue
+            fname = f"face_{timestamp_base + i}.jpg"
+            fpath = os.path.join(CAPTURE_DIR, fname)
+            try:
+                cv2.imwrite(fpath, face_img)
+                saved += 1
+            except:
+                pass
     return jsonify({"saved": saved})
 
 @app.route("/clear_captures", methods=["POST"])
@@ -215,10 +222,15 @@ def clear_captures():
 
 @app.route("/thumbnails")
 def thumbnails():
-    arr = []
-    for f in os.listdir(CAPTURE_DIR):
-        arr.append({"url": f"/{f}", "name": f})
-    return jsonify(arr)
+    files = []
+    for fn in sorted(os.listdir(CAPTURE_DIR), reverse=True):
+        if fn.lower().endswith((".png", ".jpg", ".jpeg")):
+            files.append({"name": fn, "url": f"/captured/{fn}"})
+    return jsonify(files)
+
+@app.route("/captured/<path:filename>")
+def captured_file(filename):
+    return send_from_directory(CAPTURE_DIR, filename)
 
 @app.route("/stats")
 def stats():
@@ -229,23 +241,6 @@ def stats():
             "face_detection_active": state["face_detection_active"],
             "confidence_threshold": state["confidence_threshold"]
         })
-
-@app.route("/detect_faces", methods=["POST"])
-def detect_faces_endpoint():
-    data = request.json.get("image", "")
-    if not data:
-        return jsonify({"faces": 0, "confidence": state["confidence_threshold"]})
-    try:
-        img_bytes = base64.b64decode(data.split(",")[1])
-        img = cv2.imdecode(np.frombuffer(img_bytes, np.uint8), cv2.IMREAD_COLOR)
-        faces = detect_faces(img, state["confidence_threshold"])
-        for (x, y, w, h) in faces:
-            face_img = img[y:y+h, x:x+w]
-            if face_img.size > 0:
-                estimate_age_gender(face_img)
-        return jsonify({"faces": len(faces), "confidence": state["confidence_threshold"]})
-    except:
-        return jsonify({"faces": 0, "confidence": state["confidence_threshold"]})
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
