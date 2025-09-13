@@ -20,7 +20,7 @@ MODEL_DIR = resource_path("models")
 CAPTURE_DIR = resource_path(CONFIG.get("captured_faces_dir", "captured_faces"))
 os.makedirs(CAPTURE_DIR, exist_ok=True)
 
-# Load models using paths from config (mirrors original code)
+# Load models
 def load_models(cfg):
     face_net = cv2.dnn.readNetFromCaffe(resource_path(cfg["face_detector_proto"]),
                                         resource_path(cfg["face_detector_model"]))
@@ -35,19 +35,18 @@ face_net, age_net, gender_net = load_models(CONFIG)
 AGE_LIST = ['(0-2)', '(4-6)', '(8-12)', '(15-20)', '(25-32)', '(38-43)', '(48-53)', '(60-100)']
 GENDER_LIST = ['Male', 'Female']
 
-# Shared state for detection + stats
+# Shared state
 state = {
     "face_detection_active": True,
     "confidence_threshold": 0.5,
-    "last_faces": [],            # list of tuples (x,y,w,h)
-    "last_frame": None,          # BGR numpy array
+    "last_faces": [],
+    "last_frame": None,
     "fps": 0.0,
     "faces_count": 0,
 }
-
 state_lock = threading.Lock()
 
-# Video capture setup — prefer camera, fallback to sample file
+# Safe capture setup
 def make_capture():
     idx = CONFIG.get("camera_index", 0)
     cap = cv2.VideoCapture(idx)
@@ -56,12 +55,20 @@ def make_capture():
         if os.path.exists(fallback):
             cap = cv2.VideoCapture(fallback)
         else:
-            raise RuntimeError("No camera and no sample video found.")
+            print("[WARN] No camera or sample video found. Using placeholder.")
+            return None
     return cap
 
 cap = make_capture()
 
-# Detection functions (kept close to original implementation)
+def get_placeholder_frame():
+    """Return a neutral frame if no video source is available."""
+    frame = np.zeros((480, 640, 3), dtype=np.uint8)
+    cv2.putText(frame, "No Camera Available", (120, 240),
+                cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 0, 255), 3, cv2.LINE_AA)
+    return frame
+
+# Detection helpers
 def detect_faces(frame, conf_thresh):
     h, w = frame.shape[:2]
     blob = cv2.dnn.blobFromImage(cv2.resize(frame, (300, 300)), 1.0,
@@ -93,15 +100,19 @@ def estimate_age_gender(face_img):
     age = AGE_LIST[int(np.argmax(age_preds[0]))]
     return gender, age
 
-# Worker thread that continuously reads frames and runs detection
+# Capture worker
 def capture_worker():
     prev_time = time.time()
     frame_times = []
     while True:
-        ret, frame = cap.read()
-        if not ret:
-            time.sleep(0.05)
-            continue
+        if cap is None:
+            frame = get_placeholder_frame()
+            time.sleep(0.5)
+        else:
+            ret, frame = cap.read()
+            if not ret:
+                frame = get_placeholder_frame()
+                time.sleep(0.1)
 
         start = time.time()
         faces = []
@@ -109,18 +120,13 @@ def capture_worker():
             active = state["face_detection_active"]
             conf = state["confidence_threshold"]
 
-        if active:
+        if active and cap is not None:
             try:
                 faces = detect_faces(frame, conf)
             except Exception:
                 faces = []
-
-            # annotate labels on frame (age/gender)
             for (x, y, w, h) in faces:
-                # crop face safely
-                fx, fy = x, y
-                fw, fh = max(1, w), max(1, h)
-                face_img = frame[fy:fy+fh, fx:fx+fw]
+                face_img = frame[y:y+h, x:x+w]
                 if face_img.size == 0:
                     continue
                 try:
@@ -134,7 +140,6 @@ def capture_worker():
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
 
         end = time.time()
-        # fps tracking (rolling)
         frame_times.append(end - start)
         if len(frame_times) > 30:
             frame_times.pop(0)
@@ -147,7 +152,6 @@ def capture_worker():
             state["fps"] = fps_val
             state["faces_count"] = len(faces)
 
-# Start capture thread
 t = threading.Thread(target=capture_worker, daemon=True)
 t.start()
 
@@ -164,17 +168,18 @@ def gen_mjpeg():
         with state_lock:
             frame = state["last_frame"]
         if frame is None:
-            time.sleep(0.05)
-            continue
+            frame = get_placeholder_frame()
         ret, jpeg = cv2.imencode(".jpg", frame)
         if not ret:
             continue
-        jpg_bytes = jpeg.tobytes()
-        yield boundary + b"Content-Type: image/jpeg\r\n\r\n" + jpg_bytes + b"\r\n"
+        yield boundary + b"Content-Type: image/jpeg\r\n\r\n" + jpeg.tobytes() + b"\r\n"
 
 @app.route("/video_feed")
 def video_feed():
     return Response(gen_mjpeg(), mimetype='multipart/x-mixed-replace; boundary=frame')
+
+# --- (rest of endpoints unchanged) ---
+# toggle_detection, set_confidence, capture_faces, clear_captures, stats, thumbnails, captured_file
 
 # API endpoints for controls + actions
 @app.route("/toggle_detection", methods=["POST"])
