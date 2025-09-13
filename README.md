@@ -23,12 +23,7 @@ The system also performs **age and gender prediction**, allows you to **capture 
 
 ## 🖼️ Demo
 
-![Demo Screenshot](demo.png)  
-<!-- Or add a GIF if you record one: ![Demo](demo.gif) -->
-
-👉 [Download Executable (Windows)](https://drive.google.com/your-link-here)
-
-*(Requires webcam access)*
+![Demo Screenshot](Demo.png)  
 
 ---
 
@@ -108,5 +103,3 @@ Feel free to use and modify it for learning or personal projects.
 ## 🙌 Author
 
 Made by **Sagarika**
-
-```
