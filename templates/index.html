@@ -56,11 +56,12 @@ let detectionActive = true;
 const video = document.getElementById("webcam");
 const canvas = document.getElementById("canvas");
 const ctx = canvas.getContext("2d");
-const serverVideo = document.getElementById("serverVideo");
+let lastTime = performance.now();
+let fps = 0;
 
 navigator.mediaDevices.getUserMedia({ video:true })
 .then(stream => { video.srcObject = stream; video.style.display='block'; })
-.catch(err => { console.warn("No webcam:", err); serverVideo.style.display='block'; });
+.catch(err => { console.warn("No webcam:", err); document.getElementById("serverVideo").style.display='block'; });
 
 async function postJSON(url, body={}) {
     const res = await fetch(url, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)});
@@ -71,11 +72,19 @@ async function sendFrame(){
     if(!detectionActive || !video.srcObject) return;
     ctx.drawImage(video,0,0,canvas.width,canvas.height);
     const dataURL = canvas.toDataURL("image/jpeg");
+    const start = performance.now();
     const res = await postJSON("/detect_faces",{image:dataURL});
+    const end = performance.now();
+    fps = 0.9*fps + 0.1*(1000/(end-start)); // rolling average FPS
+
     document.getElementById("faces").innerText = "Faces: "+res.faces;
-    document.getElementById("info").innerText = "Detection: "+(detectionActive?"ON":"OFF")+" • Confidence: "+res.confidence.toFixed(2);
+    document.getElementById("info").innerText = 
+        "Detection: "+(detectionActive?"ON":"OFF")+
+        " • Confidence: "+res.confidence.toFixed(2)+
+        " • FPS: "+fps.toFixed(1);
 }
 
+// Controls
 document.getElementById("toggleBtn").addEventListener("click",()=>{detectionActive=!detectionActive});
 document.getElementById("captureBtn").addEventListener("click", async()=>{
     const res = await postJSON("/capture_faces"); alert("Saved: "+res.saved); refreshGallery();
@@ -102,8 +111,13 @@ async function refreshGallery(){
     }
 }
 
-setInterval(sendFrame,1000);
+// Continuously send frames
+function loop(){
+    sendFrame().finally(()=>requestAnimationFrame(loop));
+}
+loop();
 setInterval(refreshGallery,2000);
 </script>
+
 </body>
 </html>
